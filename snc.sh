@@ -35,6 +35,16 @@ else
     fi
 fi
 
+function apply_bootstrap_etcd_hack() {
+        # This is needed for now due to etcd changes in 4.4:
+        # https://github.com/openshift/cluster-etcd-operator/pull/279
+        while ! ${OC} get etcds cluster >/dev/null 2>&1; do
+            sleep 3
+        done
+        echo "API server is up, applying etcd hack"
+        ${OC} patch etcd cluster -p='{"spec": {"unsupportedConfigOverrides": {"useUnsupportedUnsafeNonHANonProductionUnstableEtcd": true}}}' --type=merge
+}
+
 function create_json_description {
     openshiftInstallerVersion=$(${OPENSHIFT_INSTALL} version)
     sncGitHash=$(git describe --abbrev=4 HEAD 2>/dev/null || git rev-parse --short=4 HEAD)
@@ -117,7 +127,7 @@ function renew_certificates() {
     echo ${OPENSHIFT_PULL_SECRET} > pull-secret
     cli_image=$(${OC} adm release -a pull-secret info ${OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE} --image-for=cli)
     rm pull-secret
-    ${YQ} write --inplace kubelet-bootstrap-cred-manager-ds.yaml spec.template.spec.containers[0].image ${cli_image}
+    ${YQ} write kubelet-bootstrap-cred-manager-ds.yaml.in spec.template.spec.containers[0].image ${cli_image} >kubelet-bootstrap-cred-manager-ds.yaml
 
     ${OC} apply -f kubelet-bootstrap-cred-manager-ds.yaml
 
@@ -183,11 +193,10 @@ fi
 if test -z "${OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE-}"; then
     OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE="$(curl -l "${MIRROR}/${OPENSHIFT_RELEASE_VERSION}/release.txt" | sed -n 's/^Pull From: //p')"
     export OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE
-else if test -n "${OPENSHIFT_VERSION-}"; then
-        echo "Both OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE and OPENSHIFT_VERSION are set, OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE will take precedence"
-        echo "OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE: $OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"
-        echo "OPENSHIFT_VERSION: $OPENSHIFT_VERSION"
-    fi
+elif test -n "${OPENSHIFT_VERSION-}"; then
+    echo "Both OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE and OPENSHIFT_VERSION are set, OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE will take precedence"
+    echo "OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE: $OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE"
+    echo "OPENSHIFT_VERSION: $OPENSHIFT_VERSION"
 fi
 echo "Setting OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE to ${OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE}"
 
@@ -268,10 +277,11 @@ EOF
 
 # Add codeReadyContainer as invoker to identify it with telemeter
 export OPENSHIFT_INSTALL_INVOKER="codeReadyContainers"
+export KUBECONFIG=${INSTALL_DIR}/auth/kubeconfig
+
+apply_bootstrap_etcd_hack &
 
 ${OPENSHIFT_INSTALL} --dir ${INSTALL_DIR} create cluster ${OPENSHIFT_INSTALL_EXTRA_ARGS} || echo "failed to create the cluster, but that is expected.  We will block on a successful cluster via a future wait-for."
-
-export KUBECONFIG=${INSTALL_DIR}/auth/kubeconfig
 
 renew_certificates
 

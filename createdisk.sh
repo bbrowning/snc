@@ -44,8 +44,8 @@ function resize_and_sparsify {
     # Check which partition is labeled as `root`
     partition=$(${VIRT_FILESYSTEMS} -a $baseDir/$srcFile -l --partitions | sort -rk4 -n | sed -n 1p | cut -f1 -d' ')
 
-    # Resize the root partition from the default 1+15GB to 1+30GB
-    ${QEMU_IMG} create -f qcow2 $tmpFile 31G
+    # Resize the root partition from the default 1+15GB to 1+40GB
+    ${QEMU_IMG} create -f qcow2 $tmpFile 41G
     ${VIRT_RESIZE} --expand $partition $baseDir/$srcFile $tmpFile
     if [ $? -ne 0 ]; then
             echo "${VIRT_RESIZE} call failed, disk image was not properly resized, aborting"

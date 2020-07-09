@@ -145,8 +145,11 @@ function renew_certificates() {
     ${SSH} core@api.${CRC_VM_NAME}.${BASE_DOMAIN} -- sudo systemctl restart kubelet
 
     # Wait until bootstrap csr request is generated.
-    until ${OC} get csr | grep Pending; do echo 'Waiting for first CSR request.'; sleep 2; done
-    ${OC} get csr -oname | xargs ${OC} adm certificate approve
+    until ${OC} get csr | grep node-bootstrapper | grep Pending; do echo 'Waiting for first CSR request.'; sleep 2; done
+    ${OC} get csr | grep node-bootstrapper | grep Pending | awk '{print $1}' | xargs ${OC} adm certificate approve
+    # Wait until node csr request is generated
+    until ${OC} get csr | grep master-0 | grep Pending; do echo 'Waiting for node CSR request.'; sleep 2; done
+    ${OC} get csr | grep master-0 | grep Pending | awk '{print $1}' | xargs ${OC} adm certificate approve
 
     delete_operator "daemonset/kubelet-bootstrap-cred-manager" "openshift-machine-config-operator" "k8s-app=kubelet-bootstrap-cred-manager"
 }
@@ -313,6 +316,7 @@ ${OC} delete statefulset,deployment,daemonset --all -n openshift-monitoring
 ${OC} delete pods -l 'app in (installer, pruner)' -n openshift-kube-apiserver
 ${OC} delete pods -l 'app in (installer, pruner)' -n openshift-kube-scheduler
 ${OC} delete pods -l 'app in (installer, pruner)' -n openshift-kube-controller-manager
+${OC} delete pods -l 'app in (installer, pruner)' -n openshift-etcd
 
 # Clean-up 'openshift-machine-api' namespace
 delete_operator "deployment/machine-api-operator" "openshift-machine-api" "k8s-app=machine-api-operator"

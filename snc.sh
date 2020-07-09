@@ -270,7 +270,7 @@ spec:
   defaultNetwork:
     type: OpenShiftSDN
     openshiftSDNConfig:
-      mtu: 1400
+      mtu: 1350
 EOF
 
 # Add codeReadyContainer as invoker to identify it with telemeter
